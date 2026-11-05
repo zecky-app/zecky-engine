@@ -2197,7 +2197,7 @@ dependencies = [
  "group 0.14.0",
  "halo2_poseidon",
  "halo2_proofs",
- "pasta_curves 0.6.1",
+ "pasta_curves",
  "rand 0.10.3",
  "sinsemilla",
  "subtle",
@@ -2219,7 +2219,7 @@ dependencies = [
  "bitvec",
  "ff 0.14.0",
  "group 0.14.0",
- "pasta_curves 0.6.1",
+ "pasta_curves",
 ]
 
 [[package]]
@@ -2234,7 +2234,7 @@ dependencies = [
  "halo2_legacy_pdqsort",
  "indexmap 2.14.2",
  "maybe-rayon",
- "pasta_curves 0.6.1",
+ "pasta_curves",
  "rand 0.10.3",
  "rand_core 0.10.1",
  "tracing",
@@ -3049,7 +3049,7 @@ dependencies = [
  "nonempty",
  "once_cell",
  "orchard",
- "pasta_curves 0.5.2",
+ "pasta_curves",
  "pczt",
  "prost 0.14.4",
  "rand 0.10.3",
@@ -3527,7 +3527,7 @@ dependencies = [
  "lazy_static",
  "memuse",
  "nonempty",
- "pasta_curves 0.6.1",
+ "pasta_curves",
  "rand 0.10.3",
  "rand_core 0.10.1",
  "reddsa",
@@ -3638,21 +3638,6 @@ dependencies = [
 
 [[package]]
 name = "pasta_curves"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3437083215c505e867eea5478371feba43d7689d6d15ec0a209eb46fb0d4cda6"
-dependencies = [
- "blake2b_simd",
- "ff 0.13.1",
- "group 0.13.0",
- "lazy_static",
- "rand 0.8.8",
- "static_assertions",
- "subtle",
-]
-
-[[package]]
-name = "pasta_curves"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0ed53ba43531a06e1f82020907cf192fc3c25d7c0baf5c49c547b74e7103b62"
@@ -3693,7 +3678,7 @@ dependencies = [
  "jubjub",
  "nonempty",
  "orchard",
- "pasta_curves 0.6.1",
+ "pasta_curves",
  "postcard",
  "rand_core 0.10.1",
  "redjubjub",
@@ -4368,7 +4353,7 @@ dependencies = [
  "group 0.14.0",
  "hex",
  "jubjub",
- "pasta_curves 0.6.1",
+ "pasta_curves",
  "rand_core 0.10.1",
  "serde",
  "thiserror 2.0.21",
@@ -5138,7 +5123,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72744738b764bb3bb7bb5dcf71b62d19c2de8a09f850a7388f6088f244037299"
 dependencies = [
  "group 0.14.0",
- "pasta_curves 0.6.1",
+ "pasta_curves",
  "subtle",
 ]
 
@@ -8298,7 +8283,7 @@ dependencies = [
  "memuse",
  "nonempty",
  "orchard",
- "pasta_curves 0.6.1",
+ "pasta_curves",
  "pczt",
  "percent-encoding",
  "postcard",

@@ -16,7 +16,7 @@ build = "rust/build.rs"
 
 # Zcash
 orchard = { version = "0.16" }
-pasta_curves = "0.5"
+pasta_curves = "0.6"
 ff = "0.13"
 sapling = { package = "sapling-crypto", version = "0.9", default-features = false }
 transparent = { package = "zcash_transparent", version = "0.11", default-features = false }
