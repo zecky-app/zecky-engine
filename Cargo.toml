@@ -114,7 +114,7 @@ hex = "0.4"
 tempfile = "3"
 
 [build-dependencies]
-bindgen = "0.72"
+bindgen = "0.73"
 cbindgen = "0.29"
 cc = "1.0"
 
