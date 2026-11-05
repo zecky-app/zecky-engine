@@ -24,6 +24,14 @@ and this library adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   enabled, and the generated `zcashlc.h` declares them only inside `#if defined(ZCASHLC_VOTING)`.
   A caller that uses them stops compiling unless it builds with that feature and defines
   `ZCASHLC_VOTING`.
+- `ErrorKind` gains `RecipientAddressExpired` (21): a payment to a ZIP 316 revision 2 address
+  that has expired (or whose expiry conflicts with the transaction's) now reports this kind and
+  the message "the recipient address has expired; ask the recipient for a current address",
+  where it previously reported `Unclassified`. An exhaustive `switch` over `ErrorKind` must
+  handle the new case.
+- `zcashlc_propose_transfer`, `zcashlc_propose_transfer_from_uri` and
+  `zcashlc_propose_send_max_transfer`: a unified address with no receiver this wallet can pay
+  now reports `NoSupportedReceivers` (10) instead of `NoteSelectionFailed` (14).
 - `zcashlc_tor_lwd_conn_check_single_use_taddr`: the exposure window and the delay before the next check are
   counted at the block spacing of the chain tip (75 seconds before NU7, 25 seconds from NU7), so
   they stay one day and the same pace in time across the upgrade. No change at the call site.

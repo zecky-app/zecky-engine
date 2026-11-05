@@ -25,6 +25,7 @@ use std::os::raw::c_char;
 
 use tracing::debug;
 use zcash_client_backend::data_api::error::Error as WalletError;
+use zcash_client_backend::data_api::wallet::input_selection::GreedyInputSelectorError;
 use zcash_protocol::value::Zatoshis;
 
 /// Stable discriminants for the conditions a wallet is expected to render itself rather than
@@ -79,6 +80,9 @@ pub enum ErrorKind {
     BalanceOverflow = 19,
     /// A note being spent belongs to neither the internal nor the external viewing key.
     NoteMismatch = 20,
+    /// A ZIP 316 Revision 2 recipient address has expired, or its expiry conflicts with the
+    /// transaction's expiry height. A current address must be obtained from the recipient.
+    RecipientAddressExpired = 21,
 }
 
 /// The two amounts describing an [`ErrorKind::InsufficientFunds`] condition.
@@ -265,6 +269,10 @@ impl ClassifiedError {
                 ErrorKind::ExpiryHeightInvalid,
                 "the requested expiry height is below the proposal's minimum target height",
             ),
+            WalletError::RecipientAddressExpiry { .. } => (
+                ErrorKind::RecipientAddressExpired,
+                "the recipient address has expired; ask the recipient for a current address",
+            ),
             WalletError::ExpiryHeightConflictsWithCanonicalCrossing { .. } => (
                 ErrorKind::ExpiryHeightInvalid,
                 "the requested expiry height conflicts with the canonical ZIP 318 crossing",
@@ -279,6 +287,24 @@ impl ClassifiedError {
         };
 
         Self::new(context, kind, message)
+    }
+
+    /// [`Self::classify`] for call sites whose input selector is the greedy selector, which can
+    /// say more about one selection failure: a unified address with no receiver this wallet can
+    /// pay is reported as [`ErrorKind::NoSupportedReceivers`] rather than as a generic
+    /// [`ErrorKind::NoteSelectionFailed`]. The address itself is withheld, as everywhere here.
+    pub fn classify_greedy<DbE, CtE, FeeE, ChE, NoteRef>(
+        context: &'static str,
+        e: &WalletError<DbE, CtE, GreedyInputSelectorError, FeeE, ChE, NoteRef>,
+    ) -> Self {
+        if let WalletError::NoteSelection(GreedyInputSelectorError::UnsupportedAddress(_)) = e {
+            return Self::new(
+                context,
+                ErrorKind::NoSupportedReceivers,
+                "the recipient address exposes no receiver this wallet can pay",
+            );
+        }
+        Self::classify(context, e)
     }
 }
 
@@ -528,5 +554,39 @@ mod tests {
             let e = ClassifiedError::classify("ctx", case);
             assert_eq!(e.to_string(), format!("ctx: {}", e.message()));
         }
+    }
+
+    #[test]
+    fn expired_recipient_address_is_classified() {
+        use zcash_client_backend::data_api::error::AddressExpiryError;
+        let e = ClassifiedError::classify(
+            "create_proposed_transactions",
+            &TestError::RecipientAddressExpiry {
+                payment_index: 0,
+                error: AddressExpiryError::HeightExpired {
+                    address_expiry: 1.into(),
+                    chain_height: 2.into(),
+                },
+            },
+        );
+        assert_eq!(e.kind(), ErrorKind::RecipientAddressExpired);
+        assert!(e.to_string().contains("recipient address has expired"));
+    }
+
+    #[test]
+    fn unpayable_unified_address_is_no_supported_receivers() {
+        type GreedyError = WalletError<
+            Infallible,
+            Infallible,
+            GreedyInputSelectorError,
+            Infallible,
+            Infallible,
+            u32,
+        >;
+        let e = ClassifiedError::classify_greedy(
+            "propose_transfer",
+            &GreedyError::NoteSelection(GreedyInputSelectorError::UnsupportedTexAddress),
+        );
+        assert_eq!(e.kind(), ErrorKind::NoteSelectionFailed);
     }
 }

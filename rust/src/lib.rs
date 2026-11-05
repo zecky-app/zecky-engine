@@ -2404,7 +2404,7 @@ pub unsafe extern "C" fn zcashlc_propose_transfer(
         )
         .map_err(|e| {
             debug!("{CONTEXT} failed: {e}");
-            ClassifiedError::classify(CONTEXT, &e)
+            ClassifiedError::classify_greedy(CONTEXT, &e)
         })?;
 
         let encoded = Proposal::from_standard_proposal(&proposal).encode_to_vec();
@@ -2521,7 +2521,7 @@ pub unsafe extern "C" fn zcashlc_propose_send_max_transfer(
         )
         .map_err(|e| {
             debug!("{CONTEXT} failed: {e}");
-            ClassifiedError::classify(CONTEXT, &e)
+            ClassifiedError::classify_greedy(CONTEXT, &e)
         })?;
 
         let encoded = Proposal::from_standard_proposal(&proposal).encode_to_vec();
@@ -2641,7 +2641,7 @@ pub unsafe extern "C" fn zcashlc_propose_transfer_from_uri(
         )
         .map_err(|e| {
             debug!("{CONTEXT} failed: {e}");
-            ClassifiedError::classify(CONTEXT, &e)
+            ClassifiedError::classify_greedy(CONTEXT, &e)
         })?;
 
         let encoded = Proposal::from_standard_proposal(&proposal).encode_to_vec();
