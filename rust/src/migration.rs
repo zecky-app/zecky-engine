@@ -72,10 +72,10 @@ use std::path::{Path, PathBuf};
 use std::ptr;
 use std::slice;
 
+use crate::rng_compat::OsRng;
 use anyhow::anyhow;
 use ffi_helpers::panic::catch_panic;
 use orchard::keys::SpendingKey;
-use rand::rngs::OsRng;
 use rusqlite::{Connection, OptionalExtension};
 use zcash_client_backend::data_api::wallet::{
     TargetHeight,
@@ -89,7 +89,7 @@ use zcash_client_sqlite::pool_migration::orchard_ironwood::{
 };
 use zcash_client_sqlite::util::SystemClock;
 use zcash_protocol::consensus::{
-    BLOCKS_PER_HOUR, BlockHeight, Network, NetworkUpgrade, Parameters,
+    BlockHeight, Network, NetworkUpgrade, Parameters, target_time_between,
 };
 use zcash_protocol::value::Zatoshis;
 use zcash_protocol::{PoolType, ShieldedPool, TxId};
@@ -792,14 +792,23 @@ fn schedule_rows(
 /// until the first transfer fires). Empty schedule, or every height at/behind `now`, is `0`
 /// (saturating, never underflows).
 fn estimated_duration_hours(
+    params: &impl Parameters,
     broadcast_heights: impl Iterator<Item = BlockHeight>,
     now: BlockHeight,
 ) -> u32 {
-    let now = u32::from(now);
     broadcast_heights
-        .map(u32::from)
         .max()
-        .map_or(0, |max| max.saturating_sub(now) / BLOCKS_PER_HOUR)
+        .map_or(0, |max| whole_hours_between(params, now, max))
+}
+
+/// Whole hours (rounded down) of target block time from `from` to `to`; `0` when `to <= from`.
+///
+/// NU7 (ZIP 218) shortens the target block spacing from 75 s to 25 s, so a fixed blocks-per-hour
+/// divisor (the deprecated `BLOCKS_PER_HOUR` = 48) would overstate post-NU7 waits threefold. This
+/// sums the height-aware spacing instead. For a span entirely between Blossom and NU7 it equals
+/// the old `(to - from) / 48` exactly (`75 * n / 3600 == n / 48`, both floored).
+fn whole_hours_between(params: &impl Parameters, from: BlockHeight, to: BlockHeight) -> u32 {
+    u32::try_from(target_time_between(params, from, to).as_secs() / 3600).unwrap_or(u32::MAX)
 }
 
 /// The number of preparation transactions a plan commits (across all layers). Delegates to the
@@ -908,6 +917,7 @@ fn preparation_steps_from_state(state: &MigrationState) -> Vec<FfiMigrationPrepa
 /// installed at proving time, so the field now carries the "now" height the platform's duration
 /// math measures waits from — it is NOT a commitment-tree anchor.
 fn encode_schedule_from_plan(
+    params: &impl Parameters,
     plan: &MigrationPlan,
     now_reference: BlockHeight,
     plan_handle: migration_plan_cache::PlanHandle,
@@ -930,6 +940,7 @@ fn encode_schedule_from_plan(
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
     let estimated = estimated_duration_hours(
+        params,
         plan.schedule().iter().map(|e| e.broadcast_height()),
         now_reference,
     );
@@ -984,13 +995,16 @@ fn stored_transfers(state: &MigrationState) -> Vec<&MigrationTransaction> {
 /// [`estimated_duration_hours`], used by the state-encoded schedule DTO
 /// ([`encode_schedule_from_state`]) to compute the value the platform displays. Empty, or every
 /// height at/behind `now`, is `0` (saturating, never underflows).
-fn stored_duration_hours(transfers: &[&MigrationTransaction], now: BlockHeight) -> u32 {
-    let now = u32::from(now);
+fn stored_duration_hours(
+    params: &impl Parameters,
+    transfers: &[&MigrationTransaction],
+    now: BlockHeight,
+) -> u32 {
     transfers
         .iter()
-        .map(|t| u32::from(t.scheduled_height()))
+        .map(|t| t.scheduled_height())
         .max()
-        .map_or(0, |max| max.saturating_sub(now) / BLOCKS_PER_HOUR)
+        .map_or(0, |max| whole_hours_between(params, now, max))
 }
 
 /// Marshal the STORED run's full transfer subset into the platform's schedule DTO — the
@@ -1004,11 +1018,12 @@ fn stored_duration_hours(transfers: &[&MigrationTransaction], now: BlockHeight) 
 /// backed by durable, already-committed state, not by a cached proposal, and the commit-shaped
 /// calls resume that stored state without consulting a handle.
 fn encode_schedule_from_state(
+    params: &impl Parameters,
     state: &MigrationState,
     now_reference: BlockHeight,
 ) -> anyhow::Result<*mut FfiMigrationSchedule> {
     let mut transfers = stored_transfers(state);
-    let estimated = stored_duration_hours(&transfers, now_reference);
+    let estimated = stored_duration_hours(params, &transfers, now_reference);
     transfers.sort_by_key(|t| t.scheduled_height());
     let rows = transfers
         .into_iter()
@@ -1184,7 +1199,8 @@ fn serve_for_broadcast(
         .ok_or_else(|| anyhow!("no migration transaction with id {}", u32::from(id)))?;
     let mut store = account_store(&ctx.wallet, ctx.account, &mut ctx.store_conn)?;
     let tx = store
-        .take_transaction_for_broadcast(state, id)
+        // zcash_client_sqlite 0.23: extraction takes its RNG explicitly (was the OS RNG).
+        .take_transaction_for_broadcast(OsRng, state, id)
         .map_err(|e| broadcast_seam_error(id, e))?;
     let mut raw = Vec::new();
     tx.write(&mut raw)
@@ -1241,7 +1257,8 @@ fn prove_one(
                 .map_or_else(|| ctx.tip(), Ok)?;
             let network = ctx.network;
             let fvk = stored_orchard_fvk(&ctx.wallet, ctx.account)?;
-            let mut prover = WalletMigrationProver::new(&mut ctx.wallet, ctx.account, fvk);
+            // zcash_pool_migration 0.2: the prover's RNG is explicit (was the OS RNG internally).
+            let mut prover = WalletMigrationProver::new(&mut ctx.wallet, OsRng, ctx.account, fvk);
             let Some(proved) = migration_finalize::prove_due_transaction(
                 &network,
                 &mut prover,
@@ -2600,9 +2617,12 @@ fn drive_advance(
         &mut store,
         state,
         targets,
-        &AdvanceConfig::new(ReorgSettleDepth::new(
-            zcash_pool_migration::scheduling::PROVABLE_ANCHOR_DEPTH,
-        )),
+        // zcash_pool_migration 0.2: the drive needs the network's block spacing so schedule
+        // durations stay correct across NU7's 75 s -> 25 s block-time change.
+        &AdvanceConfig::new(
+            ReorgSettleDepth::new(zcash_pool_migration::scheduling::PROVABLE_ANCHOR_DEPTH),
+            zcash_pool_migration::scheduling::BlockSpacing::for_network(&ctx.network),
+        ),
         // librustzcash #2910: re-spreading a missed broadcast schedule draws fresh
         // inter-broadcast gaps, so advancing needs entropy.
         &mut OsRng,
@@ -3561,7 +3581,7 @@ pub unsafe extern "C" fn zcashlc_migration_propose_transfers(
         let mut ctx = unsafe { open(db_data, db_data_len, account_uuid_bytes, network_id)? };
         match plan_and_cache(&mut ctx, false)? {
             Some((plan, reference_height, handle)) => {
-                encode_schedule_from_plan(&plan, reference_height, handle)
+                encode_schedule_from_plan(&ctx.network, &plan, reference_height, handle)
             }
             None => Ok(encode_empty_schedule()),
         }
@@ -3995,7 +4015,7 @@ pub unsafe extern "C" fn zcashlc_migration_restart_step(
         }
         match plan_and_cache(&mut ctx, false)? {
             Some((plan, reference_height, handle)) => {
-                encode_schedule_from_plan(&plan, reference_height, handle)
+                encode_schedule_from_plan(&ctx.network, &plan, reference_height, handle)
             }
             None => Ok(encode_empty_schedule()),
         }
@@ -4076,7 +4096,7 @@ pub unsafe extern "C" fn zcashlc_migration_refresh_stale_transfers(
         let expired = state.expired_transactions(DuenessTargets::at(target));
         if expired.is_empty() {
             // Nothing to rebuild: the stored schedule IS current — serve it for re-display.
-            return encode_schedule_from_state(&state, tip);
+            return encode_schedule_from_state(&ctx.network, &state, tip);
         }
 
         let mut rng = OsRng;
@@ -4109,7 +4129,7 @@ pub unsafe extern "C" fn zcashlc_migration_refresh_stale_transfers(
         backend
             .replace_migration(&state)
             .map_err(|e| anyhow!("migration store write failed: {e}"))?;
-        encode_schedule_from_state(&state, tip)
+        encode_schedule_from_state(&ctx.network, &state, tip)
     });
     unwrap_exc_or_null(res)
 }
@@ -4569,8 +4589,17 @@ mod tests {
     use zcash_pool_migration::denomination::DenominationPlan;
     use zcash_pool_migration::engine::{MigrationLockOwner, MigrationStatus};
     use zcash_pool_migration::preparation::PreparationPlan;
-    use zcash_pool_migration::scheduling::{self, AnchorBucketInterval, SchedulingParams};
+    use zcash_pool_migration::scheduling::{
+        self, AnchorBucketInterval, BlockSpacing, SchedulingParams,
+    };
     use zcash_pool_migration::signing_rounds::min_signing_rounds;
+    use zcash_protocol::consensus::MAIN_NETWORK;
+
+    /// Mainnet block spacing for the schedule fixtures (all of their heights are pre-NU7, so the
+    /// drawn schedules are those of the pre-NU7 75-second spacing).
+    fn mainnet_spacing() -> BlockSpacing {
+        BlockSpacing::for_network(&zcash_protocol::consensus::MAIN_NETWORK)
+    }
 
     fn zat(v: u64) -> Zatoshis {
         Zatoshis::from_u64(v).unwrap()
@@ -4802,7 +4831,7 @@ mod tests {
             .expect("account creation must succeed");
         (
             account.expose_uuid().into_bytes(),
-            usk.to_bytes(Era::Orchard),
+            secrecy::ExposeSecret::expose_secret(&usk.to_bytes(Era::Orchard)).clone(),
         )
     }
 
@@ -5178,7 +5207,13 @@ mod tests {
     #[test]
     fn schedule_rows_sort_chronologically_with_prep_offset() {
         let mut rng = StdRng::seed_from_u64(7);
-        let schedule = scheduling::schedule(&SchedulingParams::ZIP_318, h(1_000), 5, &mut rng);
+        let schedule = scheduling::schedule(
+            &SchedulingParams::ZIP_318,
+            &mainnet_spacing(),
+            h(1_000),
+            5,
+            &mut rng,
+        );
         // The engine hands the crossing values straight over; they are already net of the fee
         // buffer that pays each transfer's own fee.
         let crossing_values: Vec<Zatoshis> = (1..=5).map(|i| zat(i * 100_000_000)).collect();
@@ -5214,7 +5249,13 @@ mod tests {
         let expected_total: u64 = crossing_values.iter().map(|z| u64::from(*z)).sum();
 
         let mut rng_a = StdRng::seed_from_u64(1);
-        let schedule_a = scheduling::schedule(&SchedulingParams::ZIP_318, h(1_000), 5, &mut rng_a);
+        let schedule_a = scheduling::schedule(
+            &SchedulingParams::ZIP_318,
+            &mainnet_spacing(),
+            h(1_000),
+            5,
+            &mut rng_a,
+        );
         let rows_a = schedule_rows(
             &planned_transfers(0, &schedule_a),
             &crossing_values,
@@ -5223,7 +5264,13 @@ mod tests {
         .unwrap();
 
         let mut rng_b = StdRng::seed_from_u64(99);
-        let schedule_b = scheduling::schedule(&SchedulingParams::ZIP_318, h(1_000), 5, &mut rng_b);
+        let schedule_b = scheduling::schedule(
+            &SchedulingParams::ZIP_318,
+            &mainnet_spacing(),
+            h(1_000),
+            5,
+            &mut rng_b,
+        );
         let rows_b = schedule_rows(
             &planned_transfers(0, &schedule_b),
             &crossing_values,
@@ -5258,7 +5305,13 @@ mod tests {
     #[test]
     fn schedule_rows_reject_length_mismatch() {
         let mut rng = StdRng::seed_from_u64(7);
-        let schedule = scheduling::schedule(&SchedulingParams::ZIP_318, h(1_000), 3, &mut rng);
+        let schedule = scheduling::schedule(
+            &SchedulingParams::ZIP_318,
+            &mainnet_spacing(),
+            h(1_000),
+            3,
+            &mut rng,
+        );
         let crossing_values = vec![zat(100)];
         assert!(
             schedule_rows(
@@ -5290,6 +5343,7 @@ mod tests {
         .unwrap();
         let schedule = scheduling::schedule(
             &SchedulingParams::ZIP_318,
+            &mainnet_spacing(),
             h(1_000),
             crossing_values.len(),
             &mut rng,
@@ -5322,15 +5376,35 @@ mod tests {
     fn estimated_duration_hours_is_measured_from_now_to_the_last_broadcast() {
         let heights = [h(1_000_336), h(1_000_432)];
         assert_eq!(
-            estimated_duration_hours(heights.into_iter(), h(1_000_000)),
+            estimated_duration_hours(&MAIN_NETWORK, heights.into_iter(), h(1_000_000)),
             9
+        );
+    }
+
+    /// NU7 (ZIP 218) cuts the target block spacing from 75 s to 25 s, so after activation an
+    /// hour is 144 blocks, not 48. The duration is measured in target TIME, not a fixed
+    /// blocks-per-hour divisor (the deprecated `BLOCKS_PER_HOUR`, which would say 9 here).
+    #[test]
+    fn estimated_duration_hours_uses_post_nu7_block_spacing() {
+        let nu7 = u32::from(MAIN_NETWORK.activation_height(NetworkUpgrade::Nu7).unwrap());
+        assert_eq!(nu7, 3_543_405);
+        let now = h(nu7 + 1_000);
+        // 432 blocks at 25 s = 10_800 s = 3 h.
+        assert_eq!(
+            estimated_duration_hours(&MAIN_NETWORK, [h(nu7 + 1_432)].into_iter(), now),
+            3
+        );
+        // A span crossing activation: 48 pre-NU7 blocks (1 h) + 144 post-NU7 blocks (1 h).
+        assert_eq!(
+            estimated_duration_hours(&MAIN_NETWORK, [h(nu7 + 143)].into_iter(), h(nu7 - 49)),
+            2
         );
     }
 
     #[test]
     fn estimated_duration_hours_empty_schedule_is_zero() {
         assert_eq!(
-            estimated_duration_hours(std::iter::empty(), h(1_000_000)),
+            estimated_duration_hours(&MAIN_NETWORK, std::iter::empty(), h(1_000_000)),
             0
         );
     }
@@ -5341,7 +5415,7 @@ mod tests {
         // `0` rather than underflowing.
         let heights = [h(900_000), h(950_000), h(1_000_000)];
         assert_eq!(
-            estimated_duration_hours(heights.into_iter(), h(1_000_000)),
+            estimated_duration_hours(&MAIN_NETWORK, heights.into_iter(), h(1_000_000)),
             0
         );
     }
@@ -5367,19 +5441,25 @@ mod tests {
     fn stored_duration_hours_is_measured_from_now_to_the_last_scheduled_height() {
         let a = transfer_at(0, 1_000_336);
         let b = transfer_at(1, 1_000_432);
-        assert_eq!(stored_duration_hours(&[&a, &b], h(1_000_000)), 9);
+        assert_eq!(
+            stored_duration_hours(&MAIN_NETWORK, &[&a, &b], h(1_000_000)),
+            9
+        );
     }
 
     #[test]
     fn stored_duration_hours_empty_is_zero() {
-        assert_eq!(stored_duration_hours(&[], h(1_000_000)), 0);
+        assert_eq!(stored_duration_hours(&MAIN_NETWORK, &[], h(1_000_000)), 0);
     }
 
     #[test]
     fn stored_duration_hours_all_overdue_is_zero() {
         let a = transfer_at(0, 900_000);
         let b = transfer_at(1, 950_000);
-        assert_eq!(stored_duration_hours(&[&a, &b], h(1_000_000)), 0);
+        assert_eq!(
+            stored_duration_hours(&MAIN_NETWORK, &[&a, &b], h(1_000_000)),
+            0
+        );
     }
 
     /// The DTO-constructing encode path end to end: `encode_schedule_from_state` must thread its
@@ -5427,8 +5507,8 @@ mod tests {
             AnchorBucketInterval::ZIP_318,
         );
 
-        let schedule_ptr =
-            encode_schedule_from_state(&state, h(1_000_000)).expect("encoding must succeed");
+        let schedule_ptr = encode_schedule_from_state(&MAIN_NETWORK, &state, h(1_000_000))
+            .expect("encoding must succeed");
         let schedule = unsafe { &*schedule_ptr };
         assert_eq!(schedule.estimated_duration_hours, 9);
         assert_eq!(
@@ -5787,7 +5867,7 @@ mod tests {
         use orchard::note::{ExtractedNoteCommitment, Note, NoteVersion, RandomSeed, Rho};
         use orchard::note_encryption::{OrchardDomain, OrchardNoteEncryption};
         use orchard::value::NoteValue;
-        use rand::RngCore;
+        use rand::Rng as RngCore;
         use zcash_client_backend::proto::compact_formats::CompactOrchardAction;
         use zcash_note_encryption::Domain;
 
@@ -5838,7 +5918,7 @@ mod tests {
             nullifier: nf_old.to_vec(),
             cmx: cmx.to_bytes().to_vec(),
             ephemeral_key: ephemeral_key.0.to_vec(),
-            ciphertext: enc_ciphertext[..52].to_vec(),
+            ciphertext: enc_ciphertext.0[..52].to_vec(),
         }
     }
 
@@ -7312,7 +7392,7 @@ mod tests {
         use orchard::keys::{FullViewingKey, Scope, SpendingKey};
         use orchard::note::{Note, NoteVersion, RandomSeed, Rho};
         use orchard::value::NoteValue;
-        use rand::RngCore;
+        use rand::Rng as RngCore;
         use zcash_primitives::transaction::fees::zip317::MARGINAL_FEE;
         use zcash_protocol::consensus::MAIN_NETWORK;
 
@@ -10900,7 +10980,7 @@ mod tests {
         let mut store = account_store(&ctx.wallet, ctx.account, &mut ctx.store_conn)
             .expect("the fixture store opens");
         store
-            .take_transaction_for_broadcast(state, MigrationTransferId::new(id))
+            .take_transaction_for_broadcast(OsRng, state, MigrationTransferId::new(id))
             .map(|_| ())
     }
 
@@ -11164,21 +11244,28 @@ mod tests {
             3_600_001,
             "the release lands at the scanned target, where the wallet can execute it"
         );
-        // The lag is 3,600,001 - 3,500,000 = 100,001 blocks; every deferred row moves by it.
+        // NU7 (mainnet activation 3,543,405) lies between this fixture's backlog (3,500,xxx)
+        // and its scanned target (3,600,001). Since zcash_pool_migration 0.2 the lag and the
+        // drawn gaps are kept in TIME, not in blocks (ZIP 318 durations are reference blocks of
+        // 75 s; from NU7 one reference block is 3 blocks of 25 s). Every deferred row therefore
+        // moves later by the full lag in time, and a pre-NU7 gap of 100 / 300 blocks after row 0
+        // becomes 300 / 900 post-NU7 blocks after the release: the same wall-clock spacing.
+        // (Before NU7, i.e. with the 0.1 crates, these were 3,600,101 / 3,600,301 / gap 200.)
         assert_eq!(
             stored_scheduled_height(&stored, 1),
-            3_600_101,
-            "the first deferred row moves later by the full lag"
+            3_600_001 + 3 * 100,
+            "the first deferred row moves later by the full lag (in time)"
         );
         assert_eq!(
             stored_scheduled_height(&stored, 2),
-            3_600_301,
-            "the second deferred row moves later by the same lag"
+            3_600_001 + 3 * 300,
+            "the second deferred row moves later by the same lag (in time)"
         );
         assert_eq!(
             stored_scheduled_height(&stored, 2) - stored_scheduled_height(&stored, 1),
-            200,
-            "the drawn inter-broadcast gap survives the wallet's absence unchanged"
+            3 * 200,
+            "the drawn inter-broadcast gap survives the wallet's absence unchanged in time \
+             (200 pre-NU7 blocks of 75 s == 600 post-NU7 blocks of 25 s)"
         );
         let _ = std::fs::remove_file(&path);
     }

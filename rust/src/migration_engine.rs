@@ -36,9 +36,9 @@
 //! anchor for transfers, preparation anchor for preparations) in [`crate::migration_finalize`],
 //! and takes the account's Orchard viewing key from [`stored_orchard_fvk`].
 
+use crate::rng_compat::OsRng;
 use anyhow::anyhow;
 use orchard::keys::FullViewingKey;
-use rand::rngs::OsRng;
 use zcash_client_backend::data_api::{Account, InputSource, WalletRead};
 use zcash_client_sqlite::AccountUuid;
 use zcash_client_sqlite::pool_migration::orchard_ironwood::{

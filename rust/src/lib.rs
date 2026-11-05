@@ -13,6 +13,7 @@ use std::slice;
 use std::time::UNIX_EPOCH;
 use std::{array::TryFromSliceError, time::SystemTime};
 
+use crate::rng_compat::OsRng;
 use anyhow::{Context, anyhow};
 use bitflags::bitflags;
 use ffi_helpers::panic::catch_panic;
@@ -23,8 +24,7 @@ use pczt::{
     roles::{combiner::Combiner, prover::Prover},
 };
 use prost::Message;
-use rand::rngs::OsRng;
-use secrecy::Secret;
+use secrecy::{ExposeSecret, Secret};
 use tor_rtcompat::ToplevelBlockOn as _;
 use tracing::{debug, metadata::LevelFilter};
 use tracing_subscriber::prelude::*;
@@ -103,7 +103,9 @@ mod migration_finalize;
 mod migration_keystone;
 mod migration_plan_cache;
 mod migration_turnstile;
+mod rng_compat;
 mod tor;
+#[cfg(feature = "voting")]
 mod voting;
 
 #[cfg(target_vendor = "apple")]
@@ -498,13 +500,11 @@ pub unsafe extern "C" fn zcashlc_get_account(
         let db_data = unsafe { wallet_db(db_data, db_data_len, network)? };
         let account_uuid = account_uuid_from_bytes(account_uuid_bytes)?;
 
-        Ok(Box::into_raw(Box::new(
-            db_data
-                .get_account(account_uuid)?
-                .map_or(ffi::Account::NOT_FOUND, |account| {
-                    ffi::Account::from_account(&account, &network)
-                }),
-        )))
+        let account = match db_data.get_account(account_uuid)? {
+            None => ffi::Account::NOT_FOUND,
+            Some(account) => ffi::Account::from_account(&account, &network)?,
+        };
+        Ok(Box::into_raw(Box::new(account)))
     });
     unwrap_exc_or_null(res)
 }
@@ -593,10 +593,12 @@ pub unsafe extern "C" fn zcashlc_create_account(
             .create_account(account_name, &seed, &birthday, key_source)
             .map_err(|e| anyhow!("Error while initializing accounts: {}", e))?;
 
+        // `to_bytes` now returns a `SecretVec`; the FFI hands the raw bytes to the caller
+        // exactly as before.
         let encoded = usk.to_bytes(Era::Orchard);
         Ok(Box::into_raw(Box::new(ffi::BinaryKey::new(
             account_uuid,
-            encoded,
+            encoded.expose_secret().clone(),
         ))))
     });
     unwrap_exc_or_null(res)
@@ -2954,6 +2956,12 @@ pub unsafe extern "C" fn zcashlc_create_proposed_transactions(
         let txids = create_proposed_transactions::<_, _, Infallible, _, Infallible, _>(
             &mut db_data,
             &network,
+            // NU7 crates: the clock (transaction timestamps, ZIP 316 R2 recipient-expiry
+            // checks) and the RNG (construction, proving, signing) are now explicit. These
+            // are the same system clock and OS RNG the wallet DB is opened with, i.e. what
+            // the library used implicitly before.
+            &SystemClock,
+            &mut OsRng,
             &prover,
             &prover,
             &SpendingKeys::from_unified_spending_key(usk),
@@ -3086,6 +3094,8 @@ pub unsafe extern "C" fn zcashlc_create_pczt_from_proposal(
             let pczt = create_pczt_from_proposal::<_, _, Infallible, _, Infallible, _>(
                 &mut db_data,
                 &network,
+                &SystemClock,
+                &mut OsRng,
                 account_uuid,
                 OvkPolicy::Sender,
                 &proposal,
@@ -3265,6 +3275,7 @@ pub unsafe extern "C" fn zcashlc_add_proofs_to_pczt(
                 })?;
             prover = prover
                 .create_orchard_proof(
+                    OsRng,
                     zcash_primitives::transaction::builder::cached_orchard_proving_key(
                         circuit_version,
                     ),
@@ -3288,6 +3299,7 @@ pub unsafe extern "C" fn zcashlc_add_proofs_to_pczt(
                 })?;
             prover = prover
                 .create_ironwood_proof(
+                    OsRng,
                     zcash_primitives::transaction::builder::cached_orchard_proving_key(
                         circuit_version,
                     ),
@@ -3313,7 +3325,7 @@ pub unsafe extern "C" fn zcashlc_add_proofs_to_pczt(
             let local_prover = LocalTxProver::new(spend_params, output_params);
 
             prover = prover
-                .create_sapling_proofs(&local_prover, &local_prover)
+                .create_sapling_proofs(OsRng, &local_prover, &local_prover)
                 .map_err(|e| anyhow!("Failed to create Sapling proofs for PCZT: {:?}", e))?;
         }
         assert!(!prover.requires_sapling_proofs());
@@ -3430,6 +3442,8 @@ pub unsafe extern "C" fn zcashlc_extract_and_store_from_pczt(
 
         let txid = extract_and_store_transaction_from_pczt::<_, ()>(
             &mut db_data,
+            &SystemClock,
+            &mut OsRng,
             pczt,
             sapling_vk.as_ref().map(|(s, o)| (s, o)),
             None,
@@ -3932,7 +3946,7 @@ pub unsafe extern "C" fn zcashlc_get_exchange_rate_usd(
         let rate = tor_runtime.runtime().block_on(async {
             tor_runtime
                 .client()
-                .get_latest_zec_to_usd_rate(&exchanges)
+                .get_latest_zec_to_usd_rate(&mut OsRng, &exchanges)
                 .await
         })?;
 
@@ -4064,7 +4078,7 @@ pub unsafe extern "C" fn zcashlc_get_exchange_rate_usd_from(
         let rate = tor_runtime.runtime().block_on(async {
             tor_runtime
                 .client()
-                .get_latest_zec_to_usd_rate(&exchanges)
+                .get_latest_zec_to_usd_rate(&mut OsRng, &exchanges)
                 .await
         })?;
 
@@ -4508,8 +4522,10 @@ pub unsafe extern "C" fn zcashlc_tor_lwd_conn_check_single_use_taddr(
         let lwd_conn = unsafe { lwd_conn.as_mut() }
             .ok_or_else(|| anyhow!("A Tor lightwalletd connection is required"))?;
 
-        // one day's worth of blocks.
-        let max_exposure_depth = (24 * 60 * 60) / 75;
+        // At least one day's worth of blocks. Zecky NU7 engine: counted at
+        // 25-second blocks (NU7), which before NU7 covers about three days:
+        // a wider window, so no exposed address is skipped.
+        let max_exposure_depth = (24 * 60 * 60) / 25;
         let addrs =
             db_data.get_ephemeral_transparent_receivers(account_uuid, max_exposure_depth, true)?;
 
@@ -4566,7 +4582,9 @@ pub unsafe extern "C" fn zcashlc_tor_lwd_conn_check_single_use_taddr(
                 let offset_blocks = blocks_since_exposure.log2();
                 // Convert the offset in blocks to an offset in seconds; this will always fit in a
                 // u32.
-                let offset_seconds = (offset_blocks * 75.0).round() as u32;
+                // Zecky NU7 engine: 25-second blocks; before NU7 this only
+                // makes the next check come sooner, never later.
+                let offset_seconds = (offset_blocks * 25.0).round() as u32;
                 db_data.schedule_next_check(&addr, offset_seconds)?;
             }
         }
@@ -4689,6 +4707,12 @@ pub extern "C" fn zcashlc_set_custom_network(
         nu6_1: height(nu6_1),
         nu6_2: height(nu6_2),
         nu6_3: height(nu6_3),
+        // NU7 (zcash_protocol 0.11) added a required `nu7` activation height. The C ABI of
+        // this function is frozen (the Swift layer passes exactly ten heights), so a custom /
+        // regtest network has NU7 *not activated* — the same as passing a negative height.
+        // TODO(nu7): add an `nu7: i64` parameter (and `NetworkActivationHeights.nu7` on the
+        // Swift side) in a coordinated ABI change, to test against a node with NU7 nuparams.
+        nu7: None,
     };
 
     match CUSTOM_PARAMS.write() {
@@ -4787,6 +4811,26 @@ pub(crate) fn parse_optional_height(value: i64) -> anyhow::Result<Option<BlockHe
 mod tests {
     use super::*;
 
+    /// NU7 is in effect: the FFI's branch-id lookup returns the NU7 consensus branch ID
+    /// (0x77190AD9) from the mainnet activation height 3,543,405, and NU6.3 just below it.
+    #[test]
+    fn branch_id_for_height_selects_nu7_from_its_mainnet_activation() {
+        const NU7_ACTIVATION: i32 = 3_543_405;
+        const NU7_BRANCH_ID: u32 = 0x7719_0AD9;
+        const NU6_3_BRANCH_ID: u32 = 0x37A5_165B;
+        let at = |h: i32| zcashlc_branch_id_for_height(h, NETWORK_ID_MAINNET) as u32;
+
+        assert_eq!(
+            MainNetwork.activation_height(NetworkUpgrade::Nu7),
+            Some(BlockHeight::from_u32(NU7_ACTIVATION as u32)),
+        );
+        assert_eq!(at(NU7_ACTIVATION - 1), NU6_3_BRANCH_ID);
+        assert_eq!(at(NU7_ACTIVATION), NU7_BRANCH_ID);
+        assert_eq!(at(NU7_ACTIVATION + 1), NU7_BRANCH_ID);
+        assert_eq!(at(4_000_000), NU7_BRANCH_ID);
+        assert_eq!(u32::from(BranchId::Nu7), NU7_BRANCH_ID);
+    }
+
     /// Only the production network gets the ZIP 318 grid, whose anonymity set depends on every
     /// wallet sharing it. Testnet gets the shortened grid, so a migration passes through anchor
     /// boundaries fast enough to be exercised.
@@ -4821,6 +4865,7 @@ mod tests {
                 nu6_1: height,
                 nu6_2: height,
                 nu6_3: height,
+                nu7: height,
             },
         };
         assert_eq!(

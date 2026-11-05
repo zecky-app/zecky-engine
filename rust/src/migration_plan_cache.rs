@@ -31,8 +31,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
-use rand::RngCore;
-use rand::rngs::OsRng;
+use crate::rng_compat::OsRng;
+use rand::Rng as RngCore;
 use zcash_pool_migration::engine::MigrationPlan;
 
 /// Opaque identifier of one cached [`MigrationPlan`]. Drawn fresh (randomly, never zero) for

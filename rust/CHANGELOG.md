@@ -6,6 +6,24 @@ and this library adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed (Zecky NU7 engine)
+
+- Built on the NU7 releases of librustzcash: `zcash_protocol` 0.11.0 (NU7 at mainnet height
+  3,543,405, consensus branch ID `0x77190AD9`, 25-second blocks), `zcash_client_backend` 0.25.0,
+  `zcash_client_sqlite` 0.23.0 and the matching crates. No C function signature changed.
+- Opening an existing wallet database migrates it to the `zcash_client_sqlite` 0.23 schema. This
+  is one-way: an older `libzcashlc` cannot open it afterwards.
+- Send and shield functions: without an explicit expiry, a transaction now expires 120 blocks
+  after its target height from NU7 (25-second blocks), the same time as 40 blocks before.
+  Payments to an address whose ZIP 316 revision 2 expiry has passed fail with a new error.
+- Address and viewing-key decoding also accepts ZIP 316 revision 2 encodings (`zu…`/`tu…`).
+  Addresses and keys this library creates stay revision 0.
+- `zcashlc_get_account` and `zcashlc_spending_key_to_full_viewing_key` can now return an error
+  (null) when a key cannot be encoded, where they previously always succeeded.
+- `zcashlc_voting_*` functions are not built unless the `voting` feature is enabled. Their
+  declarations remain in the generated header; do not call them.
+
+
 ### Added
 
 - `zcashlc_take_last_error_report` returns the most recent error as an `ErrorReport` (an
