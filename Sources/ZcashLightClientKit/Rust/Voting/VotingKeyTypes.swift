@@ -141,8 +141,3 @@ extension BlockHeight {
         return height
     }
 }
-
-// `VotingDelegationKeyInputs` is `Sendable` and carries the account index
-// across the detached proving task, so the index must be `Sendable` too. Its
-// only stored property is a `UInt32`.
-extension Zip32AccountIndex: Sendable {}

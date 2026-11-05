@@ -1,3 +1,10 @@
+# Zecky engine: the voting API is not included
+
+`libzcashlc` is built without community voting, so `VotingRustBackend` and the
+other types in `Rust/Voting/` are not part of the package. Code that uses them
+stops compiling. Remove those calls; this build has no replacement.
+`Zip32AccountIndex` stays `Sendable`.
+
 # Migrating from previous versions to 4.0.0
 
 ## Proposal errors carry `RedactedRustError` instead of `String`

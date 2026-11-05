@@ -48,7 +48,7 @@ reddsa 0.6.1
   Zecky does not use it, so it is not built, the header only declares it under
   `ZCASHLC_VOTING`, and the Swift package leaves out its wrapper and tests.
 - `rust/src/rng_compat.rs`: `rand` 0.10 has no `OsRng`; the same operating-system
-  generator (getrandom → `SecRandomCopyBytes` on Apple) is passed where the new
+  generator (getrandom → `CCRandomGenerateBytes` on iOS, `getentropy` on macOS) is passed where the new
   APIs ask for an RNG. It panics rather than degrade if the OS generator fails.
 - New explicit arguments the crates now require (RNG, clock, network block
   spacing), type conversions, and the ZIP 316 revision 2 address API (the engine

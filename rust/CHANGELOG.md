@@ -24,7 +24,7 @@ and this library adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   enabled, and the generated `zcashlc.h` declares them only inside `#if defined(ZCASHLC_VOTING)`.
   A caller that uses them stops compiling unless it builds with that feature and defines
   `ZCASHLC_VOTING`.
-- `zcashlc_check_single_use_taddr`: the exposure window and the delay before the next check are
+- `zcashlc_tor_lwd_conn_check_single_use_taddr`: the exposure window and the delay before the next check are
   counted at the block spacing of the chain tip (75 seconds before NU7, 25 seconds from NU7), so
   they stay one day and the same pace in time across the upgrade. No change at the call site.
 
