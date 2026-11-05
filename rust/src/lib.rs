@@ -83,7 +83,7 @@ use zcash_protocol::{
     consensus::{
         BlockHeight, BranchId, Network,
         Network::{MainNetwork, TestNetwork},
-        NetworkType, NetworkUpgrade, Parameters, pow_target_spacing,
+        NetworkType, NetworkUpgrade, Parameters, pow_target_spacing, target_time_between,
     },
     local_consensus::LocalNetwork,
     memo::MemoBytes,
@@ -105,8 +105,6 @@ mod migration_plan_cache;
 mod migration_turnstile;
 mod rng_compat;
 mod tor;
-#[cfg(feature = "voting")]
-mod voting;
 
 #[cfg(target_vendor = "apple")]
 mod os_log;
@@ -4573,20 +4571,7 @@ pub unsafe extern "C" fn zcashlc_tor_lwd_conn_check_single_use_taddr(
             )?;
 
             if found.is_none() {
-                let blocks_since_exposure = match meta.exposure() {
-                    Exposure::Exposed { at_height, .. } => {
-                        f64::from(std::cmp::max(cur_height - at_height, 1))
-                    }
-                    Exposure::Unknown => 1.0,
-                    Exposure::CannotKnow => 1.0,
-                };
-
-                // We will schedule the next check to occur after approximately
-                // log2(blocks_since_exposure) additional blocks.
-                let offset_blocks = blocks_since_exposure.log2();
-                // Convert the offset in blocks to an offset in seconds; this will always fit in a
-                // u32.
-                let offset_seconds = (offset_blocks * f64::from(spacing_secs)).round() as u32;
+                let offset_seconds = check_delay_seconds(&network, meta.exposure(), cur_height);
                 db_data.schedule_next_check(&addr, offset_seconds)?;
             }
         }
@@ -4595,6 +4580,32 @@ pub unsafe extern "C" fn zcashlc_tor_lwd_conn_check_single_use_taddr(
     });
 
     unwrap_exc_or_null(res)
+}
+
+/// The pre-NU7 block spacing, used as the reference unit for the single-use address check.
+const CHECK_REFERENCE_BLOCK_SECONDS: u64 = 75;
+
+/// Seconds until the next check of an exposed single-use transparent address.
+///
+/// Upstream schedules the next check about log2(blocks since exposure) blocks later, with
+/// 75-second blocks. Zecky NU7 engine: both the elapsed time and the delay are counted in
+/// 75-second reference blocks, from the chain's actual target spacing, so the pace in time is
+/// the same before and after NU7 (25-second blocks would otherwise make checks 2-3x as frequent,
+/// and more frequent queries reveal more to the server).
+fn check_delay_seconds<P: Parameters>(
+    params: &P,
+    exposure: Exposure,
+    cur_height: BlockHeight,
+) -> u32 {
+    let reference_blocks_since_exposure = match exposure {
+        Exposure::Exposed { at_height, .. } => {
+            let elapsed = target_time_between(params, at_height, cur_height).as_secs();
+            std::cmp::max(elapsed / CHECK_REFERENCE_BLOCK_SECONDS, 1) as f64
+        }
+        Exposure::Unknown | Exposure::CannotKnow => 1.0,
+    };
+    // log2 of at most u64::MAX is below 64, so this always fits in a u32.
+    (reference_blocks_since_exposure.log2() * CHECK_REFERENCE_BLOCK_SECONDS as f64).round() as u32
 }
 
 //
@@ -4815,6 +4826,27 @@ mod tests {
 
     /// NU7 is in effect: the FFI's branch-id lookup returns the NU7 consensus branch ID
     /// (0x77190AD9) from the mainnet activation height 3,543,405, and NU6.3 just below it.
+    /// Zecky NU7 engine: the single-use address check keeps its pace in time across NU7. One
+    /// day after exposure the delay is the same whether that day had 75- or 25-second blocks.
+    #[test]
+    fn single_use_address_check_delay_keeps_its_pace_across_nu7() {
+        use zcash_client_backend::wallet::GapMetadata;
+        let nu7 = MainNetwork.activation_height(NetworkUpgrade::Nu7).unwrap();
+        let exposed = |at: BlockHeight| Exposure::Exposed {
+            at_height: at,
+            gap_metadata: GapMetadata::GapRecoverable { gap_limit: 10 },
+        };
+        let day_before_nu7 =
+            check_delay_seconds(&MainNetwork, exposed(nu7 - 3000 - 1152), nu7 - 3000);
+        let day_after_nu7 =
+            check_delay_seconds(&MainNetwork, exposed(nu7 + 1000), nu7 + 1000 + 3456);
+        let expected = ((1152f64).log2() * 75.0).round() as u32;
+        assert_eq!(day_before_nu7, expected);
+        assert_eq!(day_after_nu7, expected);
+        assert_eq!(check_delay_seconds(&MainNetwork, Exposure::Unknown, nu7), 0);
+        assert_eq!(check_delay_seconds(&MainNetwork, exposed(nu7), nu7), 0);
+    }
+
     #[test]
     fn branch_id_for_height_selects_nu7_from_its_mainnet_activation() {
         const NU7_ACTIVATION: i32 = 3_543_405;

@@ -20,10 +20,8 @@ and this library adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Addresses and keys this library creates stay revision 0.
 - `zcashlc_get_account` and `zcashlc_spending_key_to_full_viewing_key` can now return an error
   (null) when a key cannot be encoded, where they previously always succeeded.
-- `zcashlc_voting_*` functions and their types are not built unless the `voting` feature is
-  enabled, and the generated `zcashlc.h` declares them only inside `#if defined(ZCASHLC_VOTING)`.
-  A caller that uses them stops compiling unless it builds with that feature and defines
-  `ZCASHLC_VOTING`.
+- The `zcashlc_voting_*` functions and their types are removed, together with the
+  `zcash_voting` dependency. A caller that uses them stops compiling; there is no replacement.
 - `ErrorKind` gains `RecipientAddressExpired` (21): a payment to a ZIP 316 revision 2 address
   that has expired (or whose expiry conflicts with the transaction's) now reports this kind and
   the message "the recipient address has expired; ask the recipient for a current address",
@@ -32,10 +30,11 @@ and this library adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `zcashlc_propose_transfer`, `zcashlc_propose_transfer_from_uri` and
   `zcashlc_propose_send_max_transfer`: a unified address with no receiver this wallet can pay
   now reports `NoSupportedReceivers` (10) instead of `NoteSelectionFailed` (14).
-- `zcashlc_tor_lwd_conn_check_single_use_taddr`: the exposure window and the delay before the next check are
-  counted at the block spacing of the chain tip (75 seconds before NU7, 25 seconds from NU7), so
-  they stay one day and the same pace in time across the upgrade. No change at the call site.
-
+- `zcashlc_tor_lwd_conn_check_single_use_taddr`: the exposure window is one day of blocks at
+  the chain tip's spacing (1,152 blocks before NU7, 3,456 from NU7). The delay before the next
+  check is about log2(time since exposure) reference blocks of 75 seconds, both measured in
+  75-second blocks from the chain's target spacing, so checks keep the same pace in time
+  across NU7. No change at the call site.
 
 ### Added
 

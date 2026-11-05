@@ -44,19 +44,21 @@ reddsa 0.6.1
 - Two dependencies still come from git, as in upstream 4.0.0: `ur` and
   `ur-registry` from Keystone (they read and write the QR codes of the Keystone
   hardware wallet). Both are pinned to an exact commit, not a tag.
-- Community voting (`zcash_voting`) is behind an off-by-default `voting` feature.
-  Zecky does not use it, so it is not built, the header only declares it under
-  `ZCASHLC_VOTING`, and the Swift package leaves out its wrapper and tests.
+- Community voting is removed: the `zcash_voting` dependency, its FFI functions
+  (`zcashlc_voting_*`) and, in the Swift package, its wrapper and tests. Zecky
+  does not use it, and it pulled in many crates of its own.
 - `rust/src/rng_compat.rs`: `rand` 0.10 has no `OsRng`; the same operating-system
   generator (getrandom → `CCRandomGenerateBytes` on iOS, `getentropy` on macOS) is passed where the new
   APIs ask for an RNG. It panics rather than degrade if the OS generator fails.
 - New explicit arguments the crates now require (RNG, clock, network block
   spacing), type conversions, and the ZIP 316 revision 2 address API (the engine
   still emits revision 0 addresses, readable by every wallet).
-- The single-use transparent address check counts its one-day window and its
-  retry delay at the block spacing of the chain tip (75 s before NU7, 25 s
-  after), so it keeps the same pace in time across the upgrade.
-- No C function signature changed.
+- The single-use transparent address check keeps a one-day window at the chain
+  tip's block spacing, and counts its retry delay in 75-second reference
+  blocks, so it checks at the same pace in time before and after NU7.
+- Clearer errors: `RecipientAddressExpired` for an expired ZIP 316 revision 2
+  address, and `NoSupportedReceivers` for an address with no payable receiver.
+- No remaining C function changed its signature; the voting functions are gone.
 
 - `libc` is held at 0.2.189, the version upstream 4.0.0 shipped. From 0.2.190
   libc declares `proc_pidinfo` for macOS only, and `sysinfo` (used by Tor's

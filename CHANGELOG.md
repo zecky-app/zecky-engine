@@ -9,7 +9,7 @@ and this library adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Changed
 
 - The voting API (`VotingRustBackend` and the other types in `Rust/Voting/`) is no longer part of
-  the package, because `libzcashlc` is built without community voting. Code that uses them stops
+  the package, because `libzcashlc` no longer contains community voting. Code that uses them stops
   compiling; there is no replacement in this build.
 
 # 4.0.0 - 2026-10-19
