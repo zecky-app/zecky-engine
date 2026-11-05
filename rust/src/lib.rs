@@ -83,7 +83,7 @@ use zcash_protocol::{
     consensus::{
         BlockHeight, BranchId, Network,
         Network::{MainNetwork, TestNetwork},
-        NetworkType, NetworkUpgrade, Parameters,
+        NetworkType, NetworkUpgrade, Parameters, pow_target_spacing,
     },
     local_consensus::LocalNetwork,
     memo::MemoBytes,
@@ -4522,10 +4522,18 @@ pub unsafe extern "C" fn zcashlc_tor_lwd_conn_check_single_use_taddr(
         let lwd_conn = unsafe { lwd_conn.as_mut() }
             .ok_or_else(|| anyhow!("A Tor lightwalletd connection is required"))?;
 
-        // At least one day's worth of blocks. Zecky NU7 engine: counted at
-        // 25-second blocks (NU7), which before NU7 covers about three days:
-        // a wider window, so no exposed address is skipped.
-        let max_exposure_depth = (24 * 60 * 60) / 25;
+        let cur_height = db_data
+            .chain_height()?
+            .ok_or(SqliteClientError::ChainHeightUnknown)?;
+
+        // Zecky NU7 engine: blocks are counted at the target spacing of the
+        // next block (75 seconds before NU7, 25 seconds from NU7), so the
+        // window stays one day and checks keep their pre-NU7 pace in time.
+        let spacing_secs = u32::try_from(pow_target_spacing(&network, cur_height + 1).as_secs())
+            .expect("block spacing fits in u32");
+
+        // At least one day's worth of blocks.
+        let max_exposure_depth = (24 * 60 * 60) / spacing_secs;
         let addrs =
             db_data.get_ephemeral_transparent_receivers(account_uuid, max_exposure_depth, true)?;
 
@@ -4539,10 +4547,6 @@ pub unsafe extern "C" fn zcashlc_tor_lwd_conn_check_single_use_taddr(
                     && matches!(meta.exposure(), Exposure::Exposed { .. })
             })
             .min_by_key(|(_, meta)| meta.next_check_time());
-
-        let cur_height = db_data
-            .chain_height()?
-            .ok_or(SqliteClientError::ChainHeightUnknown)?;
 
         let mut found = None;
         if let Some((addr, meta)) = selected_addr_meta {
@@ -4582,9 +4586,7 @@ pub unsafe extern "C" fn zcashlc_tor_lwd_conn_check_single_use_taddr(
                 let offset_blocks = blocks_since_exposure.log2();
                 // Convert the offset in blocks to an offset in seconds; this will always fit in a
                 // u32.
-                // Zecky NU7 engine: 25-second blocks; before NU7 this only
-                // makes the next check come sooner, never later.
-                let offset_seconds = (offset_blocks * 25.0).round() as u32;
+                let offset_seconds = (offset_blocks * f64::from(spacing_secs)).round() as u32;
                 db_data.schedule_next_check(&addr, offset_seconds)?;
             }
         }

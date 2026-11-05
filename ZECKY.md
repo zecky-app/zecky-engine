@@ -39,17 +39,23 @@ reddsa 0.6.1
 ## What the NU7 commit changes (connection code only)
 
 - Dependency versions moved to the NU7 releases; the `[patch]` git pins to
-  in-progress librustzcash revisions were removed: only crates.io releases.
+  in-progress librustzcash revisions were removed. All Zcash crates come from
+  crates.io releases, checked by checksum in Cargo.lock.
+- Two dependencies still come from git, as in upstream 4.0.0: `ur` and
+  `ur-registry` from Keystone (they read and write the QR codes of the Keystone
+  hardware wallet). Both are pinned to an exact commit, not a tag.
 - Community voting (`zcash_voting`) is behind an off-by-default `voting` feature.
-  Zecky does not use it, so it is not built.
+  Zecky does not use it, so it is not built, the header only declares it under
+  `ZCASHLC_VOTING`, and the Swift package leaves out its wrapper and tests.
 - `rust/src/rng_compat.rs`: `rand` 0.10 has no `OsRng`; the same operating-system
   generator (getrandom → `SecRandomCopyBytes` on Apple) is passed where the new
   APIs ask for an RNG. It panics rather than degrade if the OS generator fails.
 - New explicit arguments the crates now require (RNG, clock, network block
   spacing), type conversions, and the ZIP 316 revision 2 address API (the engine
   still emits revision 0 addresses, readable by every wallet).
-- Two internal time windows that assumed 75-second blocks now assume 25 seconds,
-  so they never check less than before.
+- The single-use transparent address check counts its one-day window and its
+  retry delay at the block spacing of the chain tip (75 s before NU7, 25 s
+  after), so it keeps the same pace in time across the upgrade.
 - No C function signature changed.
 
 ## Build

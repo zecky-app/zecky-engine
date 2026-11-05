@@ -43,7 +43,10 @@ targets.append(contentsOf: [
         dependencies: sdkDependencies,
         exclude: [
             "Modules/Service/GRPC/ProtoBuf/proto/proposal.proto",
-            "Error/Sourcery/"
+            "Error/Sourcery/",
+            // Zecky: community voting is not built into libzcashlc (Rust
+            // feature `voting` is off), so its Swift wrapper is left out.
+            "Rust/Voting/"
         ],
         resources: [
             .copy("Resources/checkpoints")
@@ -73,7 +76,15 @@ targets.append(contentsOf: [
     ),
     .testTarget(
         name: "OfflineTests",
-        dependencies: ["ZcashLightClientKit", "TestUtils"]
+        dependencies: ["ZcashLightClientKit", "TestUtils"],
+        exclude: [
+            "PirSnapshotResolverTests.swift",
+            "VotingConfirmVoteSubmissionTests.swift",
+            "VotingKeyTypesTests.swift",
+            "VotingRecoverWireJsonTests.swift",
+            "VotingRustBackendTests.swift",
+            "VotingSignDelegationRequestTests.swift"
+        ]
     ),
     .testTarget(
         name: "NetworkTests",

@@ -30,6 +30,10 @@ fn main() {
     if let Ok(b) = cbindgen::Builder::new()
         .with_crate(crate_dir)
         .with_language(cbindgen::Language::C)
+        // Zecky: the voting functions are only built with the `voting`
+        // feature, so the header only declares them when ZCASHLC_VOTING is
+        // defined. Without it, a caller cannot link against missing symbols.
+        .with_define("feature", "voting", "ZCASHLC_VOTING")
         .rename_item("Account", "FfiAccount")
         .rename_item("Uuid", "FfiUuid")
         .rename_item("Accounts", "FfiAccounts")
