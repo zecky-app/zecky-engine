@@ -75,6 +75,13 @@ The result is `BuildSupport/products/libzcashlc.xcframework`. Record its
 SHA-256 in the apps' engine checksum tests together with the commit it was
 built from. Builds use the committed Cargo.lock (`--locked`).
 
+## Checks
+
+The upstream GitHub workflows (CI on macOS, CodeQL, zizmor, proto sync) and
+Dependabot were removed: they target the Zcash team's setup. Every engine
+change is checked by `cargo test`, an independent review of the FFI diff and
+a full Mac build before it is released.
+
 ## Updating
 
 For each Zcash network upgrade or security release of librustzcash: bump the
