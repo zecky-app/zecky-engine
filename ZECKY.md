@@ -64,6 +64,14 @@ reddsa 0.6.1
   libc declares `proc_pidinfo` for macOS only, and `sysinfo` (used by Tor's
   memory quota) then fails to compile for iOS. Check this before moving it.
 
+- Dependency age: every crate in Cargo.lock was published at least 14 days
+  before the build (checked against crates.io on November 5, 2026; cutoff
+  October 22). 37 newer patch releases were pinned back with
+  `cargo update -p <crate> --precise <version>`, among them bls12_381 0.9.0,
+  pairing 0.24.0, halo2_proofs 0.4.0, equihash 0.3.0 and aes 0.9.3 (the newer
+  ones only change performance). None had to stay new: the NU7 core crates
+  themselves were released on October 21.
+
 ## Build
 
 On a Mac with Xcode and rustup:
