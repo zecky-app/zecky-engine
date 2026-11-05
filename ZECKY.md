@@ -58,6 +58,10 @@ reddsa 0.6.1
   after), so it keeps the same pace in time across the upgrade.
 - No C function signature changed.
 
+- `libc` is held at 0.2.189, the version upstream 4.0.0 shipped. From 0.2.190
+  libc declares `proc_pidinfo` for macOS only, and `sysinfo` (used by Tor's
+  memory quota) then fails to compile for iOS. Check this before moving it.
+
 ## Build
 
 On a Mac with Xcode and rustup:
