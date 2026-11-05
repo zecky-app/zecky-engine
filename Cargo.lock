@@ -3059,7 +3059,7 @@ dependencies = [
  "sapling-crypto",
  "schemerz 0.3.0",
  "schemerz-rusqlite 0.371.0",
- "secrecy",
+ "secrecy 0.10.3",
  "serde",
  "serde_json",
  "sharded-slab",
@@ -4850,6 +4850,15 @@ name = "secrecy"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9bd1c54ea06cfd2f6b63219704de0b9b4f72dcc2b8fdef820be6cd799780e91e"
+dependencies = [
+ "zeroize",
+]
+
+[[package]]
+name = "secrecy"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e891af845473308773346dc847b2c23ee78fe442e0472ac50e22a18a93d3ae5a"
 dependencies = [
  "zeroize",
 ]
@@ -7759,7 +7768,7 @@ dependencies = [
  "rand 0.10.3",
  "rand_core 0.10.1",
  "rayon",
- "secrecy",
+ "secrecy 0.8.0",
  "shardtree 0.7.1",
  "subtle",
  "time",
@@ -7803,7 +7812,7 @@ dependencies = [
  "rusqlite",
  "schemerz 0.2.0",
  "schemerz-rusqlite 0.370.0",
- "secrecy",
+ "secrecy 0.8.0",
  "shardtree 0.7.1",
  "subtle",
  "time",
@@ -7912,7 +7921,7 @@ dependencies = [
  "bs58",
  "corez",
  "nonempty",
- "secrecy",
+ "secrecy 0.8.0",
  "zakura-address",
  "zakura-orchard",
  "zakura-protocol",
@@ -8309,7 +8318,7 @@ dependencies = [
  "rust_decimal",
  "sapling-crypto",
  "secp256k1",
- "secrecy",
+ "secrecy 0.8.0",
  "serde",
  "serde_json",
  "shardtree 0.8.0",
@@ -8368,7 +8377,7 @@ dependencies = [
  "schemerz 0.3.0",
  "schemerz-rusqlite 0.371.0",
  "secp256k1",
- "secrecy",
+ "secrecy 0.8.0",
  "serde",
  "shardtree 0.8.0",
  "static_assertions",
@@ -8430,7 +8439,7 @@ dependencies = [
  "orchard",
  "rand_core 0.10.1",
  "sapling-crypto",
- "secrecy",
+ "secrecy 0.8.0",
  "subtle",
  "tracing",
  "zcash_address",

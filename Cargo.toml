@@ -63,7 +63,7 @@ prost = "0.14"
 rusqlite = "0.37"
 schemerz = "0.3"
 schemerz-rusqlite = "0.371"
-secrecy = "0.8"
+secrecy = "0.10"
 rand = "0.10"
 nonempty = "0.11"
 
