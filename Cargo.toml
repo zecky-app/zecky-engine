@@ -65,7 +65,7 @@ schemerz = "0.3"
 schemerz-rusqlite = "0.371"
 secrecy = "0.8"
 rand = "0.10"
-nonempty = "0.11"
+nonempty = "0.12"
 
 # FFI
 anyhow = "1.0"
