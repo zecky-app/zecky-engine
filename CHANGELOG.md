@@ -6,6 +6,15 @@ and this library adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # Unreleased
 
+## Added
+
+- `SDKSynchronizer.scanOverview() async throws -> ScanOverview` reads, without changing anything,
+  the fully scanned height, the furthest scanned height and the block ranges still to scan
+  (`first..<end` with the engine's priority; ranges marked scanned or ignored are left out). Use it
+  to show sync progress across the whole wallet instead of the current scan batch. It throws
+  `ZcashError.synchronizerNotPrepared` before `prepare` has run. `ScanOverview` and
+  `ScanOverview.ToScan` are new public types with public initializers, for test doubles.
+
 ## Changed
 
 - The voting API (`VotingRustBackend` and the other types in `Rust/Voting/`) is no longer part of

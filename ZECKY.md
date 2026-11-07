@@ -72,6 +72,14 @@ reddsa 0.6.1
   ones only change performance). None had to stay new: the NU7 core crates
   themselves were released on October 21.
 
+## Swift additions
+
+- `SDKSynchronizer.scanOverview()` (from 4.0.0-zecky.4): a read-only view of
+  the scan state for the apps' sync ring. It only calls the existing read-only
+  backend functions `suggestScanRanges()`, `fullyScannedHeight()` and
+  `maxScannedHeight()`. No Rust code changed, so 4.0.0-zecky.4 ships the
+  4.0.0-zecky.3 library files byte for byte, with the same checksums.
+
 ## Build
 
 On a Mac with Xcode and rustup:

@@ -393,6 +393,31 @@ public class SDKSynchronizer: Synchronizer {
         try await initializer.rustBackend.listAccounts()
     }
 
+    /// Reads how far the wallet has scanned, without changing anything: the fully and the
+    /// furthest scanned height, and the ranges still to scan with their priority. Hosts use it
+    /// to show sync progress across the whole wallet rather than the current scan batch.
+    ///
+    /// - Throws: `ZcashError.synchronizerNotPrepared` before `prepare` has run, or the
+    ///   underlying error when the wallet database cannot be read.
+    public func scanOverview() async throws -> ScanOverview {
+        try throwIfUnprepared()
+        let backend = initializer.rustBackend
+        let toScan = try await backend.suggestScanRanges()
+            .filter { $0.priority != .scanned && $0.priority != .ignored }
+            .map {
+                ScanOverview.ToScan(
+                    first: $0.range.lowerBound,
+                    end: $0.range.upperBound,
+                    priority: $0.priority.rawValue
+                )
+            }
+        return ScanOverview(
+            fullyScanned: try await backend.fullyScannedHeight(),
+            maxScanned: try await backend.maxScannedHeight(),
+            toScan: toScan
+        )
+    }
+
     // swiftlint:disable:next function_parameter_count
     public func importAccount(
         ufvk: String,
