@@ -33,7 +33,7 @@ Proven by the test `tests::branch_id_for_height_selects_nu7_from_its_mainnet_act
 zcash_protocol 0.11.0 · zcash_primitives 0.31.0 · zcash_proofs 0.31.0 ·
 zcash_client_backend 0.25.0 · zcash_client_sqlite 0.23.0 · zcash_keys 0.17.0 ·
 zcash_address 0.14.0 · zcash_transparent 0.11.0 · orchard 0.16.0 ·
-sapling-crypto 0.9.0 · pczt 0.10.0 · halo2_proofs 0.4.1 · redjubjub 0.9.0 ·
+sapling-crypto 0.9.0 · pczt 0.10.0 · halo2_proofs 0.4.0 · redjubjub 0.9.0 ·
 reddsa 0.6.1
 
 ## What the NU7 commit changes (connection code only)

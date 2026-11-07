@@ -214,7 +214,11 @@ impl BinaryKey {
 pub unsafe extern "C" fn zcashlc_free_binary_key(ptr: *mut BinaryKey) {
     if !ptr.is_null() {
         let key: Box<BinaryKey> = unsafe { Box::from_raw(ptr) };
-        free_ptr_from_vec(key.encoding, key.encoding_len);
+        // Zecky (audit C-51): the encoding is a spending key; wipe it before
+        // the memory is given back.
+        free_ptr_from_vec_with(key.encoding, key.encoding_len, |b: &mut u8| {
+            zeroize::Zeroize::zeroize(b)
+        });
         drop(key);
     }
 }
@@ -680,7 +684,8 @@ impl BoxedSlice {
 pub unsafe extern "C" fn zcashlc_free_boxed_slice(ptr: *mut BoxedSlice) {
     if !ptr.is_null() {
         let s: Box<BoxedSlice> = unsafe { Box::from_raw(ptr) };
-        free_ptr_from_vec(s.ptr, s.len);
+        // Zecky (audit C-51): boxed slices can carry key bytes; wipe them.
+        free_ptr_from_vec_with(s.ptr, s.len, |b: &mut u8| zeroize::Zeroize::zeroize(b));
         drop(s);
     }
 }

@@ -20,15 +20,22 @@ ALL_ARCHS = $(IOS_DEVICE_ARCHS) $(IOS_SIM_ARCHS) $(MACOS_ARCHS)
 #
 # Passing several `--target` flags to one invocation puts every architecture in a
 # single job graph, letting those passes run concurrently.
-CARGO_BUILD = RUSTUP_TOOLCHAIN=stable cargo build --manifest-path ../Cargo.toml --release
+# Zecky (audit C-12): the toolchain is pinned in ../rust-toolchain.toml, the
+# build uses the committed Cargo.lock as is (--locked), and the builder's home
+# folder is not written into the binary, so a second Mac can rebuild the same
+# bytes and no account name ends up in a public release asset.
+ZECKY_TOOLCHAIN = 1.99.1
+CARGO_BUILD = RUSTUP_TOOLCHAIN=$(ZECKY_TOOLCHAIN) \
+	RUSTFLAGS="--remap-path-prefix=$(HOME)=/build --remap-path-prefix=$(abspath ..)=/zecky-engine" \
+	cargo build --manifest-path ../Cargo.toml --release --locked
 cargo_targets = $(addprefix --target ,$(1))
 
 RUST_SRCS = $(shell find ../rust -name "*.rs") ../Cargo.toml
 STATIC_LIBS = $(shell find ../target -name "libzcashlc.a")
 
 install:
-	rustup toolchain add stable
-	rustup +stable target add aarch64-apple-ios x86_64-apple-ios x86_64-apple-darwin aarch64-apple-darwin aarch64-apple-ios-sim
+	rustup toolchain add $(ZECKY_TOOLCHAIN)
+	rustup +$(ZECKY_TOOLCHAIN) target add aarch64-apple-ios x86_64-apple-ios x86_64-apple-darwin aarch64-apple-darwin aarch64-apple-ios-sim
 	
 .PHONY: install
 

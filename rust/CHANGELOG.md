@@ -4,6 +4,21 @@ All notable changes to this library will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this library adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 4.0.0-zecky.3 (unreleased)
+
+- Security (audit C-10): `ctutils` 0.4.3 → 0.4.4 (RUSTSEC-2026-0385, used by
+  hmac/sha2/chacha20poly1305), `zstd` 0.13.3 → 0.13.4 and `zstd-safe` 7.3.0 →
+  7.4.0 (RUSTSEC-2026-0391 and related, Tor directory decompression). The
+  zstd releases are 5 days old: a security exception to the 14-day rule.
+  `cargo audit` after the change: only `rsa` (Tor signature checks, no fix)
+  and `crypto-bigint` (in the lock, not compiled) remain.
+- Reproducible builds (audit C-12): `rust-toolchain.toml` pins rustc 1.99.1,
+  the build runs `--locked`, and `--remap-path-prefix` keeps the builder's
+  home folder out of the binary.
+- The FFI freshness marker now reads `4.0.0-zecky.3`.
+- Spending-key bytes handed to Swift are wiped before they are freed
+  (`zcashlc_free_binary_key`, `zcashlc_free_boxed_slice`; audit C-51).
+
 ## Unreleased
 
 ### Changed (Zecky NU7 engine)

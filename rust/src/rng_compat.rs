@@ -1,7 +1,8 @@
 //! Zecky NU7 engine: rand 0.10 has no `OsRng`. The NU7 releases of the Zcash
 //! crates take any `rand_core::Rng + CryptoRng`; this keeps the old name for
-//! the operating system's secure generator (getrandom / SecRandomCopyBytes on
-//! Apple platforms), panicking instead of silently degrading if it fails.
+//! the operating system's secure generator (getrandom: CCRandomGenerateBytes
+//! on iOS, getentropy on macOS), panicking instead of silently degrading if
+//! it fails.
 //!
 //! `OsRng` is a stateless unit struct (both a type and a value, like the old
 //! `rand::rngs::OsRng`), so `&mut OsRng` borrows a fresh temporary rather than

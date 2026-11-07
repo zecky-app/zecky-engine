@@ -297,7 +297,7 @@ pub unsafe extern "C" fn zcashlc_init_on_load(log_level: *const c_char) {
     // the subscriber): greppable in device logs AND via `strings` on the
     // built slice.
     tracing::info!(
-        zcashlc_build = "2026-08-02.v0.13-proved-tx-wallet-persistence",
+        zcashlc_build = "4.0.0-zecky.3",
         "tracing initialized (zcash_client_backend capped at WARN)"
     );
 
