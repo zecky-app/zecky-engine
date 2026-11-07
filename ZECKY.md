@@ -98,6 +98,26 @@ For each Zcash network upgrade or security release of librustzcash: bump the
 crates, run `cargo test`, review the FFI diff independently, rebuild, update the
 checksum pins in the apps, test on testnet, then one small mainnet send.
 
+## Signing
+
+Every commit and release tag is signed with an SSH key for
+`dev@zecky.app`. `allowed_signers` in this repository lists the keys, so
+anyone can check them:
+
+```
+git -c gpg.ssh.allowedSignersFile=allowed_signers log --show-signature
+```
+
+| Key fingerprint | Signs |
+|---|---|
+| `SHA256:32dP45eSMmVSt/G/CGvcxl/P+MO3Nwj9xeTh/GSA2wc` | the first commits, up to `3a69cb0` (Nov 5, 2026) |
+| `SHA256:M6SEmM+7kCA/JG4CsMniVCf9xGJVV1DPGmGvvTZhsSw` | from `ffd2b22` (Nov 6, 2026) |
+
+The first key was made in a temporary build environment and is no longer
+available, so a new key, kept on the maintainer's Mac and registered on
+GitHub as a signing key, took over on Nov 6, 2026. Nothing signed by the
+first key changed.
+
 ## Licence
 
 MIT, as the upstream SDK (see LICENSE). The librustzcash crates are MIT OR
