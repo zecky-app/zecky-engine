@@ -27,6 +27,7 @@ ALL_ARCHS = $(IOS_DEVICE_ARCHS) $(IOS_SIM_ARCHS) $(MACOS_ARCHS)
 ZECKY_TOOLCHAIN = 1.99.1
 CARGO_BUILD = RUSTUP_TOOLCHAIN=$(ZECKY_TOOLCHAIN) \
 	RUSTFLAGS="--remap-path-prefix=$(HOME)=/build --remap-path-prefix=$(abspath ..)=/zecky-engine" \
+	CFLAGS="-ffile-prefix-map=$(HOME)=/build" ASMFLAGS="-ffile-prefix-map=$(HOME)=/build" \
 	cargo build --manifest-path ../Cargo.toml --release --locked
 cargo_targets = $(addprefix --target ,$(1))
 
