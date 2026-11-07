@@ -32,7 +32,7 @@ if useLocalFFI {
     targets.append(
         .binaryTarget(
             name: "libzcashlc",
-            url: "https://github.com/zecky-app/zecky-engine/releases/download/v4.0.0-zecky.3/libzcashlc-swiftpm.xcframework.zip",
+            url: "https://github.com/zecky-app/zecky-engine/releases/download/v4.0.0-zecky.4/libzcashlc-swiftpm.xcframework.zip",
             checksum: "35a3e6829555d4a3f5a5b0aafea5577318e8f81d8b27ec6a2de98ce76ba15a7c"
         )
     )
