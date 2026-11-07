@@ -25,13 +25,15 @@ if useLocalFFI {
     dependencies.append(.package(name: "libzcashlc", path: "LocalPackages"))
     sdkDependencies.append(.product(name: "libzcashlc", package: "libzcashlc"))
 } else {
-    // Binary target for the Rust FFI library
-    // Updated by Scripts/release.sh during the release process
+    // Zecky (audit C-51): the Zecky engine release, not the upstream 4.0.0
+    // binary (which knows no NU7). This asset has every slice, macOS
+    // included; the iPhone app uses libzcashlc.xcframework.zip of the same
+    // release, which has the iOS slices as plain static libraries.
     targets.append(
         .binaryTarget(
             name: "libzcashlc",
-            url: "https://github.com/zcash/zcash-swift-wallet-sdk/releases/download/4.0.0/libzcashlc.xcframework.zip",
-            checksum: "0a8d827293cbf8ffc53056b8de4213183f9fafc132c605f232d2160bea180094"
+            url: "https://github.com/zecky-app/zecky-engine/releases/download/v4.0.0-zecky.3/libzcashlc-swiftpm.xcframework.zip",
+            checksum: "35a3e6829555d4a3f5a5b0aafea5577318e8f81d8b27ec6a2de98ce76ba15a7c"
         )
     )
     sdkDependencies.append("libzcashlc")
