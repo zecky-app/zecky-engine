@@ -80,6 +80,19 @@ reddsa 0.6.1
   `maxScannedHeight()`. No Rust code changed, so 4.0.0-zecky.4 ships the
   4.0.0-zecky.3 library files byte for byte, with the same checksums.
 
+## Checkpoints
+
+The bundled chain checkpoints seed a new wallet's birthday: a wallet starts
+scanning at the newest checkpoint at or below its birthday. 4.0.0-zecky.5
+adds mainnet 3,392,500 to 3,550,000 (every 2,500 blocks) and testnet
+4,100,000 to 4,590,000 (every 10,000), fetched with the SDK's own
+update-checkpoints tool from zec.rocks and checked by its verifier. Six of
+the new mainnet checkpoints (3,392,500, 3,450,000, 3,500,000, 3,542,500,
+3,545,000, 3,550,000) were compared with an independent node (the
+maintainer's own Zaino) and were identical. Checkpoints are package
+resources, not part of the Rust library, so the library files and their
+checksums are those of 4.0.0-zecky.3.
+
 ## Build
 
 On a Mac with Xcode and rustup:

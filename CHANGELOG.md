@@ -21,6 +21,24 @@ and this library adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the package, because `libzcashlc` no longer contains community voting. Code that uses them stops
   compiling; there is no replacement in this build.
 
+## Checkpoints
+
+Mainnet
+
+````
+Sources/ZcashLightClientKit/Resources/checkpoints/mainnet/3392500.json
+...
+Sources/ZcashLightClientKit/Resources/checkpoints/mainnet/3550000.json
+````
+
+Testnet
+
+````
+Sources/ZcashLightClientKit/Resources/checkpoints/testnet/4100000.json
+...
+Sources/ZcashLightClientKit/Resources/checkpoints/testnet/4590000.json
+````
+
 # 4.0.0 - 2026-10-19
 
 This is the final release of ZcashLightClientKit. Support ends when NU7 activates; development
