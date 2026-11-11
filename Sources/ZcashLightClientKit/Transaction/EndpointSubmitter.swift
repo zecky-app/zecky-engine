@@ -28,7 +28,7 @@ final class GRPCEndpointSubmitter: EndpointSubmitter {
         let mode: ServiceMode
         let serviceTorClient: TorClient
         let transport: String
-        if await sdkFlags.torEnabled {
+        if await sdkFlags.submitsOverTor(to: endpoint) {
             // One isolated Tor client per submission attempt: connecting
             // through the shared TorClient serializes every endpoint behind
             // one blocking FFI call on its actor, so a single stalled endpoint

@@ -19,6 +19,15 @@ actor SDKFlags {
     /// When enabled, the `TorClient` is initialized but is not used for lwdService calls.
     var exchangeRateEnabled: Bool
 
+    /// Zecky: `submitOverTor` sends transactions over Tor while every other
+    /// lightwalletd call stays on its own connection ("own node for reading,
+    /// Tor for sending"). Unlike `torEnabled` it changes nothing for reads, so
+    /// it works with a sync endpoint Tor cannot reach, such as a node on this
+    /// machine. Set through `SDKSynchronizer.submitOverTor(enabled:)` before
+    /// the synchronizer starts, so background retries follow it from the
+    /// first block.
+    var submitOverTor = false
+
     /// This flag communicates state of initialization of `TorClient`
     /// `nil` = the attempt to initialize `TorClient` hasn't been initiated
     /// `false` = initialization of `TorClient` failed
@@ -46,6 +55,22 @@ actor SDKFlags {
     /// Use to update the `torEnabled` flag
     func torFlagUpdate(_ newFlag: Bool) {
         torEnabled = newFlag
+    }
+
+    /// Use to update the `submitOverTor` flag
+    func submitOverTorFlagUpdate(_ newFlag: Bool) {
+        submitOverTor = newFlag
+    }
+
+    /// Zecky: whether a submission to `endpoint` goes over Tor. Always when
+    /// Tor is enabled for everything (unchanged upstream behaviour). With
+    /// `submitOverTor`, every endpoint Tor can reach; an endpoint on this
+    /// machine or a private network (the user's own node) cannot be reached
+    /// through Tor and is contacted directly, which the app only asks for
+    /// with the user's say-so. There is no fallback from Tor to a direct
+    /// connection: a failed Tor submission fails.
+    func submitsOverTor(to endpoint: LightWalletEndpoint) -> Bool {
+        torEnabled || (submitOverTor && !endpoint.isOnPrivateNetwork)
     }
 
     // Use to update the `exchangeRateEnabled` flag

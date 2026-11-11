@@ -11,6 +11,29 @@ import Foundation
 /**
 Represents a lightwallet instance endpoint to connect to
 */
+extension LightWalletEndpoint {
+    /// Zecky: true for an endpoint on this machine or a private network:
+    /// `localhost`, or an IPv4 literal in 127/8, 10/8, 172.16/12, 192.168/16
+    /// or 100.64/10 (carrier-grade NAT, used by Tailscale). Tor exits cannot
+    /// reach these. Octets with leading zeros are refused: "010" can be read
+    /// as octal and point at a public address.
+    public var isOnPrivateNetwork: Bool {
+        let name = self.host.lowercased()
+        if name == "localhost" { return true }
+        let parts = name.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 4 else { return false }
+        var n: [Int] = []
+        for part in parts {
+            guard !part.isEmpty, part.count <= 3, part.allSatisfy({ $0.isASCII && $0.isNumber }),
+                  part.count == 1 || part.first != "0",
+                  let value = Int(part), value <= 255 else { return false }
+            n.append(value)
+        }
+        return n[0] == 127 || n[0] == 10 || (n[0] == 192 && n[1] == 168)
+            || (n[0] == 172 && (16...31).contains(n[1])) || (n[0] == 100 && (64...127).contains(n[1]))
+    }
+}
+
 public struct LightWalletEndpoint {
     public let host: String
     public let port: Int

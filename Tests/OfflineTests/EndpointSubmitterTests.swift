@@ -76,4 +76,57 @@ final class EndpointSubmitterTests: ZcashTestCase {
             // Any non-submitError error is the expected transport failure.
         }
     }
+
+    // MARK: Zecky: Tor for sending only
+
+    func testPrivateNetworkEndpoints() {
+        let isPrivate = { (host: String) in LightWalletEndpoint(address: host, port: 8137, secure: false).isOnPrivateNetwork }
+        for host in ["127.0.0.1", "localhost", "LOCALHOST", "10.0.0.5", "192.168.1.32", "172.16.0.1", "172.31.255.255", "100.64.0.1", "100.127.1.1"] {
+            XCTAssertTrue(isPrivate(host), host)
+        }
+        for host in ["zec.rocks", "8.8.8.8", "172.32.0.1", "100.128.0.1", "192.169.1.1", "010.0.0.1", "127.1", "127.0.0.1.evil.example", "", "1.2.3.256", "::1"] {
+            XCTAssertFalse(isPrivate(host), host)
+        }
+    }
+
+    func testSubmitOverTorRule() async {
+        let own = LightWalletEndpoint(address: "127.0.0.1", port: 8137, secure: false)
+        let server = LightWalletEndpoint(address: "zec.rocks", port: 443, secure: true)
+
+        let off = SDKFlags(torEnabled: false, exchangeRateEnabled: false)
+        let offOwn = await off.submitsOverTor(to: own)
+        let offServer = await off.submitsOverTor(to: server)
+        XCTAssertFalse(offOwn)
+        XCTAssertFalse(offServer)
+
+        let sending = SDKFlags(torEnabled: false, exchangeRateEnabled: false)
+        await sending.submitOverTorFlagUpdate(true)
+        let sendingOwn = await sending.submitsOverTor(to: own)
+        let sendingServer = await sending.submitsOverTor(to: server)
+        XCTAssertFalse(sendingOwn, "the own node is reached directly: Tor cannot reach it")
+        XCTAssertTrue(sendingServer, "a public server only over Tor")
+
+        // Upstream behaviour unchanged: Tor for everything.
+        let everything = SDKFlags(torEnabled: true, exchangeRateEnabled: false)
+        let everythingOwn = await everything.submitsOverTor(to: own)
+        XCTAssertTrue(everythingOwn)
+    }
+
+    func testSubmitOverTorStillDeliversToTheOwnNodeDirectly() async throws {
+        let service = try RecordingCompactTxStreamerService(sendResponse: makeSendResponse(errorCode: 0, errorMessage: ""))
+        defer { try? service.stop() }
+        let flags = SDKFlags(torEnabled: false, exchangeRateEnabled: false)
+        await flags.submitOverTorFlagUpdate(true)
+        let submitter = GRPCEndpointSubmitter(
+            torClient: TorClient(torDir: try __torDirURL()),
+            sdkFlags: flags,
+            logger: submissionLifecycleLogger()
+        )
+        let transaction = makeTransaction()
+        XCTAssertTrue(service.endpoint.isOnPrivateNetwork)
+
+        try await submitter.submit(transaction: transaction, to: service.endpoint)
+
+        XCTAssertEqual(service.recordedTransactions(), [transaction.raw])
+    }
 }

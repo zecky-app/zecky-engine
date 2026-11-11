@@ -1079,6 +1079,16 @@ public class SDKSynchronizer: Synchronizer {
         await sdkFlags.torFlagUpdate(enabled)
     }
 
+    /// Zecky: transactions are submitted over Tor, each attempt on its own
+    /// isolated circuit, while every other call keeps its own connection.
+    /// Call it before `prepare`/`start`, so background retries follow it too.
+    /// The Tor client starts with the first submission. Endpoints on this
+    /// machine or a private network are contacted directly (Tor cannot reach
+    /// them); nothing falls back from Tor to a direct connection.
+    public func submitOverTor(enabled: Bool) async {
+        await sdkFlags.submitOverTorFlagUpdate(enabled)
+    }
+
     public func exchangeRateOverTor(enabled: Bool) async throws {
         let isTorEnabled = await sdkFlags.torEnabled
 
