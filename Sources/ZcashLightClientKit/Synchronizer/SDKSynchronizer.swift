@@ -1156,6 +1156,24 @@ public class SDKSynchronizer: Synchronizer {
         transactionRepository.debugDatabase(sql: sql)
     }
 
+    /// Zecky (Lock it's Genuine node, issue #6 of the review): the tree
+    /// state at `height` from a server other than the wallet's own, always
+    /// over a fresh Tor circuit, so the server cannot link the request to
+    /// this machine's address or to anything else it asks. Lock it compares
+    /// it with its own node's before vouching for a chain fingerprint.
+    /// Returns the block hash and the three commitment tree states, exactly
+    /// as the server sent them.
+    public func treeStateOverTor(
+        height: UInt64,
+        from endpoint: LightWalletEndpoint
+    ) async throws -> (hash: String, saplingTree: String, orchardTree: String, ironwoodTree: String) {
+        let torClient = initializer.container.resolve(TorClient.self)
+        try await torClient.prepare()
+        let service = LightWalletGRPCServiceOverTor(endpoint: endpoint, tor: torClient)
+        let state = try await service.getTreeState(BlockID(height: height), mode: .uniqueTor)
+        return (state.hash, state.saplingTree, state.orchardTree, state.ironwoodTree)
+    }
+
     public func getTreeState(height: UInt64) async throws -> Data {
         let treeState = try await initializer.lightWalletService.getTreeState(
             BlockID(height: height),
